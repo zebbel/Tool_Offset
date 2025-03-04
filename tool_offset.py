@@ -50,7 +50,8 @@ class ToolsCalibrate:
         # Register commands
         self.gcode = self.printer.lookup_object('gcode')
 
-        self.gcode.register_command("TOOL_CALIBRATE_ENDSTOP_OFFSET", self.cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET, desc=self.cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET_help)
+        self.gcode.register_command('TOOL_CALIBRATE_BED_PROBE_OFFSET', self.cmd_TOOL_CALIBRATE_BED_PROBE_OFFSET, desc=self.cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET_help)
+        self.gcode.register_command('TOOL_CALIBRATE_ENDSTOP_OFFSET', self.cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET, desc=self.cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET_help)
         self.gcode.register_command('TOOL_LOCATE_SENSOR', self.cmd_TOOL_LOCATE_SENSOR, desc=self.cmd_TOOL_LOCATE_SENSOR_help)
         self.gcode.register_command('TOOL_CALIBRATE_TOOL_OFFSET', self.cmd_TOOL_CALIBRATE_TOOL_OFFSET, desc=self.cmd_TOOL_CALIBRATE_TOOL_OFFSET_help)
         self.gcode.register_command('TOOL_APPLY_TOOL_OFFSET', self.cmd_TOOL_APPLY_TOOL_OFFSET, desc=self.cmd_TOOL_APPLY_TOOL_OFFSET_help)
@@ -121,6 +122,29 @@ class ToolsCalibrate:
         toolhead.manual_move([center_x, center_y, corrected_xy_probe_z_possition + self.final_lift_z], self.lift_speed)
 
         return [center_x, center_y, self.sensor_location[2]]
+    
+    def cmd_TOOL_CALIBRATE_BED_PROBE_OFFSET(self, gcmd):
+        toolhead = self.printer.lookup_object('toolhead')
+        phoming = self.printer.lookup_object('homing')
+
+        curtime = self.printer.get_reactor().monotonic()
+        kin_status = toolhead.get_kinematics().get_status(curtime)
+
+        # move to center possition
+        toolhead.manual_move([None, None, self.save_z_height], self.travel_speed)
+        toolhead.manual_move([175.0, 175.0, None], self.travel_speed)
+
+        # first bed probe
+        pos = toolhead.get_position()
+        pos[2] = kin_status['axis_minimum'][2]
+        epos = phoming.probing_move(self.bed_probe, pos, 5.0)
+        # retract
+        toolhead.manual_move([None, None, epos[2] + self.lift_z], self.lift_speed)
+        # second bed probe
+        pos = toolhead.get_position()
+        pos[2] = kin_status['axis_minimum'][2]
+        epos = phoming.probing_move(self.bed_probe, pos, 5.0)
+        self.gcode.respond_info("%s: bed probe at %.3f,%.3f is z=%.6f" % (gcmd.get_command(), epos[0], epos[1], epos[2]))
     
     cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET_help = "calibrate offset from bed to Z endstop"
     def cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET(self, gcmd):
