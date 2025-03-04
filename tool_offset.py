@@ -51,7 +51,7 @@ class ToolsCalibrate:
         self.gcode.register_command("TOOL_CALIBRATE_ENDSTOP_OFFSET", self.cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET, desc=self.cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET_help)
         self.gcode.register_command('TOOL_LOCATE_SENSOR', self.cmd_TOOL_LOCATE_SENSOR, desc=self.cmd_TOOL_LOCATE_SENSOR_help)
         self.gcode.register_command('TOOL_CALIBRATE_TOOL_OFFSET', self.cmd_TOOL_CALIBRATE_TOOL_OFFSET, desc=self.cmd_TOOL_CALIBRATE_TOOL_OFFSET_help)
-        self.gcode.register_command('TOOL_APPLY_OFFSET', self.cmd_TOOL_APPLY_OFFSET, desc=self.cmd_TOOL_APPLY_OFFSET_help)
+        self.gcode.register_command('TOOL_APPLY_TOOL_OFFSET', self.cmd_TOOL_APPLY_TOOL_OFFSET, desc=self.cmd_TOOL_APPLY_TOOL_OFFSET_help)
         self.gcode.register_command('TOOL_CALIBRATE_SAVE_TOOL_OFFSET', self.cmd_TOOL_CALIBRATE_SAVE_TOOL_OFFSET, desc=self.cmd_TOOL_CALIBRATE_SAVE_TOOL_OFFSET_help)
         self.gcode.register_command('TOOL_CALIBRATE_PROBE_OFFSET', self.cmd_TOOL_CALIBRATE_PROBE_OFFSET, desc=self.cmd_TOOL_CALIBRATE_PROBE_OFFSET_help)
         self.gcode.register_command('TOOL_CALIBRATE_QUERY_PROBE', self.cmd_TOOL_CALIBRATE_QUERY_PROBE, desc=self.cmd_TOOL_CALIBRATE_QUERY_PROBE_help)
@@ -165,8 +165,8 @@ class ToolsCalibrate:
 
         self.gcode.respond_info("Tool offset is %.6f,%.6f,%.6f" % (self.last_result[0], self.last_result[1], self.last_result[2]))
 
-    cmd_TOOL_APPLY_OFFSET_help = "Apply offsets"
-    def cmd_TOOL_APPLY_OFFSET(self, gcmd):
+    cmd_TOOL_APPLY_TOOL_OFFSET_help = "Apply offsets"
+    def cmd_TOOL_APPLY_TOOL_OFFSET(self, gcmd):
         self.activ_tool.gcode_x_offset = self.last_result[0]
         self.activ_tool.gcode_y_offset = self.last_result[1]
         self.activ_tool.gcode_z_offset = self.last_result[2]
@@ -193,8 +193,7 @@ class ToolsCalibrate:
         toolhead = self.printer.lookup_object('toolhead')
         probe = self.printer.lookup_object(self.probe_name)
         start_pos = toolhead.get_position()
-        nozzle_z = self.probe_multi_axis.run_probe("z-", gcmd, speed_ratio=0.5)[
-            2]
+        nozzle_z = self.probe_multi_axis.run_probe("z-", gcmd, speed_ratio=0.5)[2]
         # now move down with the tool probe
         probe_session = probe.start_probe_session(gcmd)
         probe_session.run_probe(gcmd)
@@ -376,18 +375,6 @@ class PrinterProbeMultiAxis:
         if samples_result == 'median':
             return self._calc_median(positions, axis)
         return self._calc_mean(positions)
-    
-
-class EndstopWrapper:
-    def __init__(self, endstop):
-        self.mcu_endstop = endstop
-        # Wrappers
-        self.get_mcu = self.mcu_endstop.get_mcu
-        self.add_stepper = self.mcu_endstop.add_stepper
-        self.get_steppers = self.mcu_endstop.get_steppers
-        self.home_start = self.mcu_endstop.home_start
-        self.home_wait = self.mcu_endstop.home_wait
-        self.query_endstop = self.mcu_endstop.query_endstop
 
 # Endstop wrapper that enables probe specific features
 class ProbeEndstopWrapper:
