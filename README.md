@@ -10,9 +10,9 @@ git clone https://github.com/zebbel/Tool_Offset.git
 
 2) Edit `moonraker.conf` by adding the following entry:
 ```
-[update_manager client klipper_toolchanger]
+[update_manager client Tool_Offset]
 type: git_repo
-path: ~/Klipper_ToolChanger
+path: ~/Tool_Offset
 origin: https://github.com/zebbel/Tool_Offset.git
 install_script: install.sh
 is_system_service: False
