@@ -30,9 +30,9 @@ class ToolsCalibrate:
         self.save_z_height = config.getfloat('save_z_height')
         self.tool_z_offset = None
         self.activ_tool = None
-        #self.position_z_endstop = config.getsection('stepper_z').getfloat('position_endstop', note_valid=False)
+        self.position_z_endstop = config.getsection('stepper_z').getfloat('position_endstop', note_valid=False)
 
-        self.bed_probe_trigger_offset = config.getFloat("bed_probe_trigger_offset", 0.0)
+        self.bed_probe_trigger_offset = config.getfloat("bed_probe_trigger_offset", 0.0)
 
         self.probe_name = config.get('probe', 'probe')
         self.travel_speed = config.getfloat('travel_speed', 10.0, above=0.)
@@ -50,7 +50,8 @@ class ToolsCalibrate:
         # Register commands
         self.gcode = self.printer.lookup_object('gcode')
 
-        self.gcode.register_command('TOOL_CALIBRATE_BED_PROBE_OFFSET', self.cmd_TOOL_CALIBRATE_BED_PROBE_OFFSET, desc=self.cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET_help)
+        self.gcode.register_command('TOOL_TEST', self.cmd_TOOL_TEST, desc=self.cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET_help)
+        self.gcode.register_command('TOOL_PROBE_BED', self.cmd_TOOL_PROBE_BED, desc=self.cmd_TOOL_PROBE_BED_help)
         self.gcode.register_command('TOOL_CALIBRATE_ENDSTOP_OFFSET', self.cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET, desc=self.cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET_help)
         self.gcode.register_command('TOOL_LOCATE_SENSOR', self.cmd_TOOL_LOCATE_SENSOR, desc=self.cmd_TOOL_LOCATE_SENSOR_help)
         self.gcode.register_command('TOOL_CALIBRATE_TOOL_OFFSET', self.cmd_TOOL_CALIBRATE_TOOL_OFFSET, desc=self.cmd_TOOL_CALIBRATE_TOOL_OFFSET_help)
@@ -60,6 +61,7 @@ class ToolsCalibrate:
         self.gcode.register_command('TOOL_CALIBRATE_QUERY_PROBE', self.cmd_TOOL_CALIBRATE_QUERY_PROBE, desc=self.cmd_TOOL_CALIBRATE_QUERY_PROBE_help)
     
     def probe_z(self, toolhead, top_pos, direction, gcmd, samples=None):
+        #self.gcode.respond_info("probe_z %.6f,%.6f,%.6f" % (top_pos[0], top_pos[1], top_pos[2]))
         # move to endstop possition
         toolhead.manual_move([None, None, top_pos[2]], self.lift_speed)
         toolhead.manual_move([top_pos[0], top_pos[1], None], self.travel_speed)
@@ -90,6 +92,7 @@ class ToolsCalibrate:
             offset[0]]
     
     def calibrate_z(self, toolhead, top_pos, gcmd):
+        #self.gcode.respond_info("calibrate_z %.6f,%.6f,%.6f" % (top_pos[0], top_pos[1], top_pos[2]))
         z_offset = self.probe_z(toolhead, top_pos, 'z-', gcmd, samples=1)
         toolhead.manual_move([None, None, self.save_z_height], self.travel_speed)
         return z_offset
@@ -99,17 +102,14 @@ class ToolsCalibrate:
         right_x = self.probe_xy(toolhead, top_pos, 'x-', gcmd, samples=samples)
         near_y = self.probe_xy(toolhead, top_pos, 'y+', gcmd, samples=samples)
         far_y = self.probe_xy(toolhead, top_pos, 'y-', gcmd, samples=samples)
-        # retract
-        toolhead.manual_move([None, None, self.save_z_height], self.travel_speed)
         return [(left_x + right_x) / 2., (near_y + far_y) / 2.]
     
-    def locate_sensor(self, gcmd):
-        toolhead = self.printer.lookup_object('toolhead')
+    def locate_sensor(self, toolhead, gcmd):
         self.activ_tool = self.printer.lookup_object('toolchanger').active_tool
         
         # sensor location in config is relativ to tool
         # homing uses absolute coordinat system
-        corrected_xy_probe_z_possition = self.sensor_location[2] + self.activ_tool.gcode_z_offset
+        corrected_xy_probe_z_possition = self.sensor_location[2] + self.tool_z_offset
 
         toolhead.manual_move([self.sensor_location[0], self.sensor_location[1], corrected_xy_probe_z_possition + self.lift_z], self.travel_speed)
 
@@ -119,20 +119,23 @@ class ToolsCalibrate:
 
         # Now redo X and Y, since we have a more accurate center.
         center_x, center_y = self.calibrate_xy(toolhead, [center_x, center_y, corrected_xy_probe_z_possition], gcmd)
-        toolhead.manual_move([center_x, center_y, corrected_xy_probe_z_possition + self.final_lift_z], self.lift_speed)
+        # retract
+        toolhead.manual_move([None, None, self.save_z_height], self.lift_speed)
+        toolhead.manual_move([center_x, center_y, None], self.travel_speed)
 
         return [center_x, center_y, self.sensor_location[2]]
     
-    def cmd_TOOL_CALIBRATE_BED_PROBE_OFFSET(self, gcmd):
+    def cmd_TOOL_TEST(self, gcmd):
+        self.bed_probe_trigger_offset = gcmd.get_float("VALUE")
+
+    cmd_TOOL_PROBE_BED_help = "probe bed and return result"
+    def cmd_TOOL_PROBE_BED(self, gcmd):
         toolhead = self.printer.lookup_object('toolhead')
         phoming = self.printer.lookup_object('homing')
+        kin = toolhead.get_kinematics()
 
         curtime = self.printer.get_reactor().monotonic()
-        kin_status = toolhead.get_kinematics().get_status(curtime)
-
-        # move to center possition
-        toolhead.manual_move([None, None, self.save_z_height], self.travel_speed)
-        toolhead.manual_move([175.0, 175.0, None], self.travel_speed)
+        kin_status = kin.get_status(curtime)
 
         # first bed probe
         pos = toolhead.get_position()
@@ -144,15 +147,21 @@ class ToolsCalibrate:
         pos = toolhead.get_position()
         pos[2] = kin_status['axis_minimum'][2]
         epos = phoming.probing_move(self.bed_probe, pos, 5.0)
-        self.gcode.respond_info("%s: bed probe at %.3f,%.3f is z=%.6f" % (gcmd.get_command(), epos[0], epos[1], epos[2]))
+
+        self.gcode.respond_info("bed probe result: %.6f" % (epos[2]))
+
+        # retract
+        toolhead.manual_move([None, None, self.save_z_height], self.travel_speed)
     
     cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET_help = "calibrate offset from bed to Z endstop"
     def cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET(self, gcmd):
         toolhead = self.printer.lookup_object('toolhead')
         phoming = self.printer.lookup_object('homing')
+        bed_mesh = self.printer.lookup_object('bed_mesh')
+        kin = toolhead.get_kinematics()
 
         curtime = self.printer.get_reactor().monotonic()
-        kin_status = toolhead.get_kinematics().get_status(curtime)
+        kin_status = kin.get_status(curtime)
 
         # move to center possition
         toolhead.manual_move([None, None, self.save_z_height], self.travel_speed)
@@ -167,23 +176,34 @@ class ToolsCalibrate:
         pos = toolhead.get_position()
         pos[2] = kin_status['axis_minimum'][2]
         epos = phoming.probing_move(self.bed_probe, pos, 5.0)
+
+        # zu untersuchen ob das nicht der direkter bzw einfachere weg ist
+        #toolhead_position = self.gcode_move.get_status()['position']
+        #gcode_position = self.gcode_move.get_status()['gcode_position']
+
+        mesh_diff = epos[2] - bed_mesh.get_position()[2]
+        self.gcode.respond_info("%s: mesh_diff: %.6f" % (gcmd.get_command(), mesh_diff))
+
         epos[2] = epos[2] + self.bed_probe_trigger_offset
+        self.gcode.respond_info("%s: bed probe: %.6f" % (gcmd.get_command(), epos[2]))
+        
         # retract
         toolhead.manual_move([None, None, self.save_z_height], self.travel_speed)
-        self.gcode.respond_info("%s: bed probe at %.3f,%.3f is z=%.6f" % (gcmd.get_command(), epos[0], epos[1], epos[2]))
 
         # probe endstop
         zepos= self.calibrate_z(toolhead, [self.z_endstop_x_possition, self.z_endstop_y_possition, self.save_z_height], gcmd)
-        self.gcode.respond_info("%s: z endstop probe at %.3f,%.3f is z=%.6f" % (gcmd.get_command(), zepos[0], zepos[1], zepos[2]))
+        self.gcode.respond_info("%s: z endstop probe: %.6f" % (gcmd.get_command(), zepos[2]))
 
-        self.gcode.respond_info("%s: probe diff = epos-zpos:%.6f, zpos-epos:%.6f" % (gcmd.get_command(), epos[2]-zepos[2], epos[2]-zepos[2]))
+        self.gcode.respond_info("%s: set z endstop possition to: %.6f" % (gcmd.get_command(), epos[2]-zepos[2]+mesh_diff))
+        kin.rails[2].position_endstop = epos[2]-zepos[2]+mesh_diff
 
 
     cmd_TOOL_LOCATE_SENSOR_help = ("Locate the tool calibration sensor, use with tool 0.")
     def cmd_TOOL_LOCATE_SENSOR(self, gcmd):
         toolhead = self.printer.lookup_object('toolhead')
-        self.tool_z_offset = self.calibrate_z(toolhead, [self.z_endstop_x_possition, self.z_endstop_y_possition, self.save_z_height], gcmd)
-        self.last_result = self.locate_sensor(gcmd)
+        self.gcode.run_script_from_command('G28')
+        self.tool_z_offset = 0.0
+        self.last_result = self.locate_sensor(toolhead, gcmd)
         self.sensor_location = self.last_result
         self.gcode.respond_info("Sensor location at %.6f,%.6f,%.6f" % (self.last_result[0], self.last_result[1], self.last_result[2]))
 
@@ -193,8 +213,11 @@ class ToolsCalibrate:
             raise gcmd.error("No recorded sensor location, please run TOOL_LOCATE_SENSOR first")
         
         toolhead = self.printer.lookup_object('toolhead')
-        self.tool_z_offset = self.calibrate_z(toolhead, [self.z_endstop_x_possition, self.z_endstop_y_possition, self.save_z_height], gcmd)
-        location = self.locate_sensor(gcmd)
+        zOffset = self.calibrate_z(toolhead, [self.z_endstop_x_possition, self.z_endstop_y_possition, self.save_z_height], gcmd)[2]
+        self.tool_z_offset = self.position_z_endstop + zOffset
+        #self.gcode.respond_info("z offset:%.6f, self.position_z_endstop:%.6f, self.tool_z_offset:%.6f" % (zOffset, self.position_z_endstop, self.tool_z_offset))
+
+        location = self.locate_sensor(toolhead, gcmd)
         self.last_result = [location[i] - self.sensor_location[i] for i in range(3)]
         self.last_result[2] = self.tool_z_offset
 
