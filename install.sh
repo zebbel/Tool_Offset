@@ -3,7 +3,7 @@ KLIPPER_PATH="${HOME}/klipper"
 SYSTEMDDIR="/etc/systemd/system"
 
 # Constants
-EXTENSION_NAME="klipper_toolchanger"
+EXTENSION_NAME="tool_offset"
 
 # Force script to exit if an error occurs
 set -e
