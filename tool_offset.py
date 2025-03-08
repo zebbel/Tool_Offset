@@ -53,6 +53,7 @@ class ToolsCalibrate:
         self.gcode.register_command('TOOL_TEST', self.cmd_TOOL_TEST, desc=self.cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET_help)
         self.gcode.register_command('TOOL_PROBE_BED', self.cmd_TOOL_PROBE_BED, desc=self.cmd_TOOL_PROBE_BED_help)
         self.gcode.register_command('TOOL_CALIBRATE_ENDSTOP_OFFSET', self.cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET, desc=self.cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET_help)
+        self.gcode.register_command('TOOL_RESET_Z_ENDSTOP_OFFSET', self.cmd_TOOL_RESET_Z_ENDSTOP_OFFSET, desc=self.cmd_TOOL_RESET_Z_ENDSTOP_OFFSET_help)
         self.gcode.register_command('TOOL_LOCATE_SENSOR', self.cmd_TOOL_LOCATE_SENSOR, desc=self.cmd_TOOL_LOCATE_SENSOR_help)
         self.gcode.register_command('TOOL_CALIBRATE_TOOL_OFFSET', self.cmd_TOOL_CALIBRATE_TOOL_OFFSET, desc=self.cmd_TOOL_CALIBRATE_TOOL_OFFSET_help)
         self.gcode.register_command('TOOL_APPLY_TOOL_OFFSET', self.cmd_TOOL_APPLY_TOOL_OFFSET, desc=self.cmd_TOOL_APPLY_TOOL_OFFSET_help)
@@ -199,6 +200,7 @@ class ToolsCalibrate:
         self.gcode.respond_info("set z endstop possition to: %.6f" % (epos[2]-zepos[2]+mesh_diff))
         kin.rails[2].position_endstop = epos[2]-zepos[2]+mesh_diff
 
+    cmd_TOOL_RESET_Z_ENDSTOP_OFFSET_help = ("Reset Z endstop possition to cfg value")
     def cmd_TOOL_RESET_Z_ENDSTOP_OFFSET(self, gcmd):
         toolhead = self.printer.lookup_object('toolhead')
         kin = toolhead.get_kinematics()
