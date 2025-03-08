@@ -141,17 +141,19 @@ class ToolsCalibrate:
         pos = toolhead.get_position()
         pos[2] = kin_status['axis_minimum'][2]
         epos = phoming.probing_move(self.bed_probe, pos, 5.0)
+        self.gcode.respond_info("probe at  %.6f,%.6f is z=%.6f" % (epos[0],epos[1],epos[2]))
         # retract
         toolhead.manual_move([None, None, epos[2] + self.lift_z], self.lift_speed)
         # second bed probe
         pos = toolhead.get_position()
         pos[2] = kin_status['axis_minimum'][2]
         epos = phoming.probing_move(self.bed_probe, pos, 5.0)
+        self.gcode.respond_info("probe at  %.6f,%.6f is z=%.6f" % (epos[0],epos[1],epos[2]))
 
-        self.gcode.respond_info("bed probe result: %.6f" % (epos[2]))
+        self.gcode.respond_info("bed probe result: %.6f,%.6f,%.6f" % (epos[0],epos[1],epos[2]))
 
         # retract
-        toolhead.manual_move([None, None, self.save_z_height], self.travel_speed)
+        toolhead.manual_move([None, None, epos[2] + self.lift_z], self.travel_speed)
     
     cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET_help = "calibrate offset from bed to Z endstop"
     def cmd_TOOL_CALIBRATE_ENDSTOP_OFFSET(self, gcmd):
@@ -194,9 +196,14 @@ class ToolsCalibrate:
         zepos= self.calibrate_z(toolhead, [self.z_endstop_x_possition, self.z_endstop_y_possition, self.save_z_height], gcmd)
         self.gcode.respond_info("%s: z endstop probe: %.6f" % (gcmd.get_command(), zepos[2]))
 
-        self.gcode.respond_info("%s: set z endstop possition to: %.6f" % (gcmd.get_command(), epos[2]-zepos[2]+mesh_diff))
+        self.gcode.respond_info("set z endstop possition to: %.6f" % (epos[2]-zepos[2]+mesh_diff))
         kin.rails[2].position_endstop = epos[2]-zepos[2]+mesh_diff
 
+    def cmd_TOOL_RESET_Z_ENDSTOP_OFFSET(self, gcmd):
+        toolhead = self.printer.lookup_object('toolhead')
+        kin = toolhead.get_kinematics()
+        kin.rails[2].position_endstop = self.position_z_endstop
+        self.gcode.respond_info("reset z endstop possition to: %.6f" % (self.position_z_endstop))
 
     cmd_TOOL_LOCATE_SENSOR_help = ("Locate the tool calibration sensor, use with tool 0.")
     def cmd_TOOL_LOCATE_SENSOR(self, gcmd):
